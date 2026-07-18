@@ -167,15 +167,12 @@ async function loadLocalCSV() {
                     skipEmptyLines: true,
                     encoding: 'EUC-KR',
                     complete: (r) => {
-                        console.log('[CSV 파싱 완료]', file.name, '행 수:', r.data ? r.data.length : 0, '오류:', r.errors);
                         // EUC-KR 실패시 UTF-8로 재시도
                         if (!r.data || r.data.length === 0 || (r.errors && r.errors.length > 0 && r.data.length < 2)) {
-                            console.log('[EUC-KR 실패, UTF-8 재시도]');
                             Papa.parse(file, {
                                 header: true,
                                 skipEmptyLines: true,
                                 complete: (r2) => {
-                                    console.log('[UTF-8 재시도 결과]', r2.data ? r2.data.length : 0);
                                     resolve({ filename: file.name, data: r2.data || [] });
                                 },
                                 error: (e2) => resolve({ filename: file.name, data: [] })
@@ -198,7 +195,6 @@ async function loadLocalCSV() {
                         const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
                         const ws = wb.Sheets[wb.SheetNames[0]];
                         const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
-                        console.log('[XLSX 파싱 완료]', file.name, '행 수:', json.length);
                         resolve({ filename: file.name, data: json });
                     } catch (e) {
                         console.error('[XLSX 오류]', e);
@@ -215,7 +211,6 @@ async function loadLocalCSV() {
         
         if (parsed && parsed.data && parsed.data.length > 0) {
             results.push(parsed);
-            console.log('[적재 대기열 추가]', parsed.filename, parsed.data.length + '행');
         } else {
             console.warn('[비어있는 파일]', file.name, '파싱 결과:', parsed);
             alert(`'${file.name}' 파일에서 데이터를 읽을 수 없었습니다.\n- Excel이 암호 보호되어 있지 않은지 확인\n- CSV는 EUC-KR 또는 UTF-8 인코딩 가능`);
@@ -684,7 +679,6 @@ async function verifyApiKey() {
                     textEl.textContent = 'API 연결 완료 ✔';
                     textEl.title = `모델: ${model} (${ver})`;
                 }
-                console.log('[API 검증 성공]', ver, model);
                 return;
             }
 
