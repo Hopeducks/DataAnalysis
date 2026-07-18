@@ -276,8 +276,8 @@ function renderMappingModal(csvObj) {
         if (h === '학생명' || h === '이름' || h === '성명') guessedRole = '학생명';
         else if (h === '학생ID' || h === '학번') guessedRole = '학생ID';
         else if (h.includes('날짜') || h.includes('관찰일') || h.includes('실시일') || h.includes('일자')) guessedRole = '날짜';
-        else if (h.includes('과목')) guessedRole = '과목';
-        else if (h.includes('학교급')) guessedRole = '학교급';
+        else if (h === '과목' || h === '교과') guessedRole = '과목';
+        else if (h === '학교급') guessedRole = '학교급';
         else if (h.endsWith('점수') || h.includes('성취도')) guessedRole = '성취도 점수';
         else if (h.includes('교사코멘트') || h.includes('선생님평가')) guessedRole = '종합 관찰 코멘트';
         else if (h.includes('긍정관찰') || h.includes('강점') || h.includes('장점')) guessedRole = '강점 코멘트';
@@ -550,6 +550,7 @@ window.deleteAlertRule = function(id) {
 };
 
 window.renderAlertSettings = function() {
+    if(window.refreshAlertDsSelect) window.refreshAlertDsSelect();
     const list = document.getElementById('active-rules-list');
     if(!list) return;
     list.innerHTML = '';
