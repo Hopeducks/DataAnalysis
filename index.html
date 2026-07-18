@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학습데이터 마스터 대시보드 V36</title>
+    <!-- 폰트 적용 (Pretendard) -->
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css" rel="stylesheet" type="text/css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4.3.1/build/index.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo" style="padding: 24px 20px; text-align: center; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #1e293b, #0f172a); color: white; border-top-left-radius: 12px; margin: -20px -20px 20px -20px;">
+                <h2 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1;">
+                    EduData<br><span style="color: #38bdf8; font-weight: 900;">Console</span>
+                </h2>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 6px; letter-spacing: 0.5px;">Learning Data Management</div>
+            </div>
+
+            <div class="sidebar-section">
+                <label>학교급</label>
+                <div class="pill-group grid-2" id="filter-school">
+                    <button class="pill active" data-val="초등">초등</button>
+                    <button class="pill" data-val="중학">중학</button>
+                    <button class="pill" data-val="고등">고등</button>
+                    <button class="pill" data-val="특수">특수</button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label>과목</label>
+                    <button onclick="toggleEditSubjects()" style="background:none; border:none; cursor:pointer; color:#64748b; font-size:12px;">⚙️ 편집</button>
+                </div>
+                <div class="pill-group grid-2" id="filter-subject">
+                    <!-- 동적 생성 -->
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <label>다중 데이터셋 업로드</label>
+                <div class="file-upload">
+                    <input type="file" id="csv-upload" accept=".csv, .xlsx, .xls" multiple>
+                    <div class="upload-icon">📂</div>
+                    <span id="upload-label">8종 CSV 다중 선택 가능</span>
+                </div>
+                <div id="file-name" class="file-name-display"></div>
+                <button type="button" class="btn-primary" id="load-csv-btn" style="width: 100%; margin-top: 12px; height: 42px; font-weight: bold; border-radius: 8px;">로컬 원본 데이터 적재</button>
+            </div>
+
+            <div class="sidebar-section" style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;">
+                <label>AI 결측치 복원 및 데이터 확장</label>
+                <textarea id="context-input" placeholder="예: 우리 반은 25명 분량으로 채워줘. A조 학생들은 발표력이 우수해."></textarea>
+                <button class="btn-primary" id="generate-btn" style="background:#059669; margin-top:8px;">✨ AI 데이터 유추 및 확장</button>
+            </div>
+            <div class="loading" id="loading-spinner">AI 모델 연산 중... (결측치 복원 중)</div>
+
+            <!-- API Key -->
+            <div class="api-key-container" style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border);">
+                <label>Gemini API Key</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="password" id="api-key-input" placeholder="키 입력">
+                    <button class="btn-secondary" id="toggle-api-vis" style="padding:8px;">👁️</button>
+                </div>
+                <button class="btn-secondary" id="save-api-key" style="margin-top:8px; width:100%;">저장</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="breadcrumb">홈 > 데이터 관리</div>
+                <div class="header-actions" style="display:flex; align-items:center; gap:12px;">
+                    <div class="tabs">
+                        <button class="tab-btn" data-target="view-table">데이터 전처리 뷰</button>
+                        <button class="tab-btn active" data-target="view-dashboard">시각화 대시보드</button>
+                    </div>
+                    <button class="btn-secondary" onclick="document.getElementById('alert-settings-modal').style.display='flex'; renderAlertSettings();" style="padding:6px 12px; font-weight:bold;">⚙️ 알림 조건 설정</button>
+                    <div class="api-status no-key" id="api-status-indicator">
+                        <div class="api-status-dot"></div>
+                        <span id="api-status-text">API 미연결</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <!-- 위험군 알림 배너 영역 -->
+                <div id="alert-banner-container"></div>
+
+                <!-- KPI Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-title">성취도 평균 점수</div>
+                        <div class="kpi-value" id="kpi-score">0점</div>
+                        <div class="kpi-desc">성취도평가 데이터 기준</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">전체 학생 수</div>
+                        <div class="kpi-value" id="kpi-achievement">0명</div>
+                        <div class="kpi-desc">로드된 명단 기준</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">평균 학습시간</div>
+                        <div class="kpi-value" id="kpi-time">0분</div>
+                        <div class="kpi-desc">LMS 접속로그 기준</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">데이터셋 적재 현황</div>
+                        <div class="kpi-value" id="kpi-ai">0 / 8</div>
+                        <div class="kpi-desc">확보된 데이터 종류 수</div>
+                    </div>
+                </div>
+
+                <!-- 시각화 대시보드 뷰 -->
+                <div id="view-dashboard" class="view-section active">
+                    <div class="charts-grid-snu">
+                        <div class="chart-card"><canvas id="chart1"></canvas></div>
+                        <div class="chart-card"><canvas id="chart2"></canvas></div>
+                        
+                        <div class="chart-card wide" id="heatmap-card" style="display:flex; flex-direction:column;">
+                            <!-- 히트맵은 HTML/CSS 커스텀 그리드로 구성할 수도 있고 Canvas를 쓸 수도 있음 -->
+                            <canvas id="chart3"></canvas>
+                        </div>
+                        
+                        <div class="chart-card"><canvas id="chart4"></canvas></div>
+                        <div class="chart-card"><canvas id="chart5"></canvas></div>
+                        
+                        <div class="chart-card"><canvas id="chart6"></canvas></div>
+                        <div class="chart-card"><canvas id="chart7"></canvas></div>
+                        
+                        <div class="chart-card wide"><canvas id="chart8"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- 데이터 전처리 뷰 -->
+                <div id="view-table" class="view-section" style="display:none;">
+                    <div class="table-header" style="flex-direction: column; align-items: stretch; gap: 16px;">
+                        
+                        <!-- Dataset Tabs -->
+                        <div class="dataset-tabs-container" style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px;">
+                            <button class="pill active dataset-tab" data-ds="성취도평가">성취도평가</button>
+                            <button class="pill dataset-tab" data-ds="LMS 학습로그">LMS 학습로그</button>
+                            <button class="pill dataset-tab" data-ds="형성평가">형성평가</button>
+                            <button class="pill dataset-tab" data-ds="AI도구 활용로그">AI도구 활용로그</button>
+                            <button class="pill dataset-tab" data-ds="정의적 영역 설문">정의적 영역 설문</button>
+                            <button class="pill dataset-tab" data-ds="포트폴리오">포트폴리오</button>
+                            <button class="pill dataset-tab" data-ds="교사 관찰기록">교사 관찰기록</button>
+                            <button class="pill dataset-tab" data-ds="협업활동">협업활동</button>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 id="current-dataset-title">성취도평가 데이터셋</h3>
+                            <div class="table-actions">
+                                <button class="btn-secondary" onclick="addNewRow()">➕ 행 추가</button>
+                                <button class="btn-danger" onclick="clearData()">🗑 데이터셋 지우기</button>
+                                <button class="btn-primary" onclick="downloadCSV()">📥 현재 CSV 다운로드</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table>
+                            <thead id="data-table-head">
+                                <!-- Dynamic Headers injected here -->
+                            </thead>
+                            <tbody id="data-table-body">
+                                <!-- Dynamic Data rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 위험군 조건 설정 모달 -->
+    <div id="alert-settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 600px; width: 100%;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 16px;">
+                <h2 style="margin:0; font-size: 1.25rem;">⚙️ 위험군 감지 조건 설정 (Rule Builder)</h2>
+                <button class="close-btn" onclick="document.getElementById('alert-settings-modal').style.display='none'" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background:#f9fafb; padding:16px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:20px;">
+                    <h3 style="margin-top:0; font-size:14px; color:#4b5563;">+ 새 조건 추가</h3>
+                    <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+                        <select id="rule-dataset" class="pill" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit; flex:1; min-width:120px;"></select>
+                        <select id="rule-column" class="pill" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit; flex:1; min-width:100px;"></select>
+                        <select id="rule-operator" class="pill" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit;">
+                            <option value="<">미만 (<)</option>
+                            <option value="<=">이하 (<=)</option>
+                            <option value="=">같음 (=)</option>
+                            <option value=">=">이상 (>=)</option>
+                            <option value=">">초과 (>)</option>
+                        </select>
+                        <input type="number" id="rule-value" placeholder="기준값" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; width:80px;">
+                        <button class="btn-primary" onclick="addAlertRule()" style="padding:6px 14px; white-space:nowrap;">+ 추가</button>
+                    </div>
+                </div>
+
+                <h3 style="font-size:14px; color:#4b5563; margin-bottom:10px;">활성화된 감지 조건 (OR 결합)</h3>
+                <ul id="active-rules-list" style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px;">
+                    <!-- Rules injected dynamically -->
+                </ul>
+                <div style="text-align:right; margin-top:20px; border-top:1px solid #e5e7eb; padding-top:16px;">
+                    <button class="btn-secondary" onclick="document.getElementById('alert-settings-modal').style.display='none'; updateView(); if(window.renderAlertSettings) renderAlertSettings();">닫기 및 적용</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 위험군 학생 상세 프로파일 모달 -->
+    <div id="flagged-students-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 600px; width: 90%; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 1.25rem;">🚨 맞춤형 위험군 학생 리스트</h3>
+                <button style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="document.getElementById('flagged-students-modal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                <ul id="flagged-students-list" style="list-style: none; padding: 0; margin: 0;">
+                    <!-- 동적으로 채워질 내용 -->
+                </ul>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                <button class="btn-secondary" onclick="document.getElementById('flagged-students-modal').style.display='none'">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zoom Modal -->
+    <div id="zoom-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 80%; height: 80%; display: flex; flex-direction: column;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 16px;">
+                <h3 id="zoom-title" style="margin:0; font-size: 1.25rem;">차트 확대</h3>
+                <button id="close-zoom-modal" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body" style="flex: 1; position: relative;">
+                <canvas id="zoom-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV 데이터 매핑 모달 -->
+    <div id="csv-mapping-modal" class="modal-overlay" style="display: none; z-index: 2000;">
+        <div class="modal-content" style="width: 800px; max-width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 16px;">
+                <h2 style="margin:0; font-size: 1.25rem;">업로드 데이터 매핑 설정</h2>
+                <p style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;" id="mapping-filename">파일명.csv</p>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                <div style="margin-bottom: 20px;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 8px;">이 데이터는 어떤 종류인가요?</label>
+                    <select id="mapping-dataset-type" class="form-select">
+                        <option value="성취도평가">성취도평가 (영역별 점수 등)</option>
+                        <option value="LMS 학습로그">LMS 학습로그</option>
+                        <option value="형성평가">형성평가 (문항단위)</option>
+                        <option value="교사 관찰기록">교사 관찰기록</option>
+                        <option value="AI도구 활용로그">AI도구 활용로그</option>
+                        <option value="협업활동">협업활동</option>
+                        <option value="정의적 영역 설문">정의적 영역 설문</option>
+                        <option value="포트폴리오">포트폴리오</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-weight: bold; display: block; margin-bottom: 8px;">열(Column) 역할 지정</label>
+                    <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">엑셀의 열 이름이 대시보드 표준과 다를 경우, 역할을 수동으로 지정해주세요. 지정된 열은 자동으로 표준 이름으로 변환됩니다.</p>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <thead style="background: #f8fafc; text-align: left;">
+                            <tr>
+                                <th style="padding: 10px; border-bottom: 1px solid #e5e7eb;">원본 열 이름 (CSV)</th>
+                                <th style="padding: 10px; border-bottom: 1px solid #e5e7eb;">대시보드 역할 (Role)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mapping-tbody">
+                            <!-- JS에서 동적 생성 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-secondary" onclick="cancelCsvMapping()">취소</button>
+                <button class="btn-primary" onclick="applyCsvMapping()">적용하고 데이터 적재</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 학생 심층 프로파일 모달 -->
+    <div id="student-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 80%; height: 80%; display: flex; flex-direction: column;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 16px;">
+                <h2 id="modal-student-name" style="margin:0; font-size: 1.25rem;">학생명 (S00000)</h2>
+                <button class="close-btn" onclick="closeStudentModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                <div class="modal-summary" id="modal-summary">
+                    <!-- 학생 기초 통계 -->
+                </div>
+                <!-- 위험 요인 심층 분석 컨테이너 -->
+                <div id="modal-risk-factors" style="display: none; margin-bottom: 24px;"></div>
+                <div class="modal-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px;">
+                    <div class="modal-chart-card" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; min-height: 300px;">
+                        <canvas id="modal-radar-chart"></canvas>
+                    </div>
+                    <div class="modal-info-card" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px;">
+                        <h3 style="font-size: 14px; margin-top: 0; margin-bottom: 12px;">최근 교사 관찰 기록</h3>
+                        <ul id="modal-obs-list" class="modal-list" style="list-style:none; padding:0; margin:0;"></ul>
+                        <h3 style="margin-top:24px; font-size: 14px; margin-bottom: 12px;">AI 도구 주요 활용내역</h3>
+                        <ul id="modal-ai-list" class="modal-list" style="list-style:none; padding:0; margin:0;"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <script src="app.js?v=43"></script>
+</body>
+</html>
